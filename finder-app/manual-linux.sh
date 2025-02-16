@@ -74,20 +74,20 @@ git clone git://busybox.net/busybox.git
     cd busybox
     git checkout ${BUSYBOX_VERSION}
     # TODO:  Configure busybox
-    make distclean
-    make defconfig
+
 else
     cd busybox
 fi
 
 # TODO: Make and install busybox
-
+make distclean
+make defconfig
 make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} defconfig
 make CONFIG_PREFIX=${OUTDIR}/rootfs ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} install
 
 echo "Library dependencies"
-${CROSS_COMPILE}readelf -a ${OUTDIR}/bin/busybox | grep "program interpreter"
-${CROSS_COMPILE}readelf -a ${OUTDIR}/bin/busybox | grep "Shared library"
+${CROSS_COMPILE}readelf -a ${OUTDIR}/rootfs/bin/busybox | grep "program interpreter"
+${CROSS_COMPILE}readelf -a ${OUTDIR}/rootfs/bin/busybox | grep "Shared library"
 
 # TODO: Add library dependencies to rootfs
 cp ${SYSROOT}/lib/ld-linux-aarch64.so.1 ${OUTDIR}/rootfs/lib/
@@ -123,3 +123,4 @@ sudo chown -R root:root *
 # TODO: Create initramfs.cpio.gz
 find . | cpio -H newc -ov --owner root:root > ${OUTDIR}/initramfs.cpio
 gzip -f ${OUTDIR}/initramfs.cpio
+exit 0
