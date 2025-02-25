@@ -7,7 +7,7 @@ CC := $(CROSS_COMPILE)gcc
 endif
 
 default: writer
-
+all: writer
 writer: writer.c
 	$(CC) $(CFLAGS) -o writer writer.c
 
