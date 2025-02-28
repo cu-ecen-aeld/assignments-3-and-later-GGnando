@@ -64,13 +64,15 @@ void clean_up_and_exit(int exit_flag)
 
 int become_daemon()
 {
+    // make process into daemon using double fork method
+    // first fork
     pid_t pid = fork();
     if (pid < 0) {
         syslog(LOG_ERR, "fork call failed");
         clean_up_and_exit(failure_return_code);
     }
     if (pid > 0) {
-        exit(0);
+        clean_up_and_exit(success_return_code);
     }
     
     if (setsid() < 0) {
@@ -78,14 +80,14 @@ int become_daemon()
         clean_up_and_exit(failure_return_code);
     }
     
-    
+    // second fork
     pid = fork();
     if (pid < 0) {
         syslog(LOG_ERR, "Second fork call failed");
         clean_up_and_exit(failure_return_code);
     }
     if (pid > 0) {
-        exit(0);
+        clean_up_and_exit(success_return_code);
     }
     
     umask(0);
@@ -99,10 +101,12 @@ int become_daemon()
         syslog(LOG_ERR, "Failed to open /dev/null");
         clean_up_and_exit(failure_return_code);
     }
+
     dup2(dev_null, STDIN_FILENO);
     dup2(dev_null, STDOUT_FILENO);
     dup2(dev_null, STDERR_FILENO);
     close(dev_null);
+    
     return success_return_code;
 }
 
