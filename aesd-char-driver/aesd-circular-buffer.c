@@ -29,9 +29,34 @@
 struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct aesd_circular_buffer *buffer,
             size_t char_offset, size_t *entry_offset_byte_rtn )
 {
-    /**
-    * TODO: implement per description
-    */
+    size_t current_offset = 0;
+    uint32_t index;
+    uint32_t total_entries;
+    if(buffer->full)
+    {
+        total_entries = AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
+    }
+    else if(buffer->in_offs > buffer->out_offs)
+    {
+        total_entries = buffer->in_offs - buffer->out_offs;
+    }
+    else
+    {
+        total_entries = AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED - buffer->out_offs + buffer->in_offs;
+    } 
+    
+    index = buffer->out_offs;
+    
+    for (uint32_t i = 0; i < total_entries; ++i) {
+        struct aesd_buffer_entry *entry = &buffer->entry[index];
+        
+        if (char_offset < (current_offset + entry->size)) {
+            *entry_offset_byte_rtn = char_offset - current_offset;
+            return entry;
+        }
+        current_offset += entry->size;
+        index = (index + 1) % AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
+    }
     return NULL;
 }
 
@@ -44,9 +69,16 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
 */
 void aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, const struct aesd_buffer_entry *add_entry)
 {
-    /**
-    * TODO: implement per description
-    */
+    if (buffer->full) {
+        buffer->out_offs = (buffer->out_offs + 1) % AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
+    }
+    
+    buffer->entry[buffer->in_offs] = *add_entry;
+    buffer->in_offs = (buffer->in_offs + 1) % AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
+    
+    if (buffer->in_offs == buffer->out_offs) {
+        buffer->full = true;
+    }
 }
 
 /**
