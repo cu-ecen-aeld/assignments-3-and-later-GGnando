@@ -12,6 +12,8 @@
 #include <stdbool.h>
 #include <errno.h>
 #include <netdb.h>
+#include <pthread.h> 
+#include "queue.h"
 
 const char* port = "9000";
 
@@ -23,9 +25,35 @@ FILE *file = NULL;
 const int backlog = 100;
 volatile sig_atomic_t forever = 1;
 const int buffer_size = 1024;
-
+bool timer_created = false;
 int server_fd = -1;
-int client_fd = -1;
+timer_t timerid = 0;
+pthread_mutex_t lock; 
+
+void add_timestamp_to_file()
+{
+    time_t now = time(NULL);
+    struct tm *tm_info = localtime(&now);
+
+    char time_str[100];
+    strftime(time_str, sizeof(time_str), "%Y %m %d %H %M %S %Z\n", tm_info);
+    pthread_mutex_lock(&lock);
+    fprintf(file, "timestamp:%s\n", time_str);
+    pthread_mutex_unlock(&lock);
+}
+
+typedef struct list_data_s list_data_t;
+
+struct list_data_s {
+    int client;
+    FILE* file;
+    pthread_mutex_t* file_mutex;
+    volatile sig_atomic_t done_processing;
+    pthread_t ptid;
+    char client_ip[INET_ADDRSTRLEN];
+    LIST_ENTRY(list_data_s) entries;
+};
+
 
 void clean_up_and_exit(int exit_flag);
 
@@ -34,6 +62,10 @@ void signal_handler(int signal)
     if (signal == SIGINT || signal == SIGTERM) {
         syslog(LOG_INFO, "Caught signal, exiting");
         forever = 0;
+    }
+    else if(signal == SIGALRM)
+    {
+        add_timestamp_to_file();
     }
 }
 
@@ -54,10 +86,10 @@ void clean_up_and_exit(int exit_flag)
 
         closelog();
         close(server_fd);
-        if(client_fd)
-        {
-            close(server_fd);
-        }
+    }
+    if(timer_created)
+    {
+        timer_delete(timerid);
     }
     exit(exit_flag);
 }
@@ -110,6 +142,74 @@ int become_daemon()
     return success_return_code;
 }
 
+void* client_thread(void* arg) 
+{ 
+    // allocate buffer on stack
+    char buffer[buffer_size*2];
+
+    list_data_t* thread_data = (list_data_t*)arg;
+    // while(!thread_data->done_processing)
+    // {
+    //     int bytes_received;
+    //     pthread_mutex_lock(thread_data->file_mutex);
+    //     while ((bytes_received = recv(thread_data->client, buffer, buffer_size - 1, 0)) > 0)
+    //     {
+    //         buffer[bytes_received] = '\0';
+    //         fputs(buffer, thread_data->file);
+    //         fflush(thread_data->file);
+    //         if (strchr(buffer, '\n'))
+    //         {
+    //             break;
+    //         } 
+    //     }
+
+    //     fseek(thread_data->file, 0, SEEK_SET);
+
+    //     while (fgets(buffer, buffer_size, thread_data->file))
+    //     {
+    //         send(thread_data->client, buffer, strlen(buffer), 0);
+    //     }
+    //     pthread_mutex_unlock(thread_data->file_mutex); 
+
+    //     close(thread_data->client);
+    //     thread_data->done_processing = 1;
+    // }
+
+    while(!thread_data->done_processing)
+    {
+        int bytes_received;
+        if ((bytes_received = recv(thread_data->client, buffer, buffer_size - 1, 0)) > 0)
+        {
+            buffer[bytes_received] = '\0';
+            pthread_mutex_lock(thread_data->file_mutex);
+            fputs(buffer, thread_data->file);
+            fflush(thread_data->file);
+            pthread_mutex_unlock(thread_data->file_mutex); 
+        }
+        
+
+        if (strchr(buffer, '\n'))
+        {
+            pthread_mutex_lock(thread_data->file_mutex);
+            fseek(thread_data->file, 0, SEEK_SET);
+
+            while (fgets(buffer, buffer_size, thread_data->file))
+            {
+                send(thread_data->client, buffer, strlen(buffer), 0);
+            }
+            pthread_mutex_unlock(thread_data->file_mutex); 
+    
+            close(thread_data->client);
+            thread_data->done_processing = 1;
+        } 
+
+    }
+
+    syslog(LOG_INFO, "Closed connection from %s", thread_data->client_ip);
+
+    close(thread_data->client);
+    return NULL;
+}
 
 int main(int argc, char *argv[])
 {
@@ -127,9 +227,7 @@ int main(int argc, char *argv[])
     sigemptyset(&sa.sa_mask);
     sigaction(SIGINT, &sa, NULL);
     sigaction(SIGTERM, &sa, NULL);
-
-    //allocate buffer on stack
-    char buffer[buffer_size];
+    sigaction(SIGALRM, &sa, NULL);
 
     // setup socket for server
     struct addrinfo hints, *res;
@@ -179,8 +277,43 @@ int main(int argc, char *argv[])
         return failure_return_code;
     }
 
+    if (pthread_mutex_init(&lock, NULL) != 0) { 
+        syslog(LOG_ERR, "Mutex Init failed");
+        return failure_return_code; 
+    } 
+
     if (daemon_requested) {
         become_daemon();
+    }
+
+    struct sigevent sev;
+    struct itimerspec timer_spec;
+
+    memset(&sev, 0, sizeof(sev));
+    sev.sigev_notify = SIGEV_SIGNAL;
+    sev.sigev_signo = SIGALRM;
+    sev.sigev_value.sival_ptr = &timerid;
+
+    if (timer_create(CLOCK_REALTIME, &sev, &timerid) == -1) {
+        syslog(LOG_ERR, "Error creating timer");
+        return failure_return_code;
+    }
+    else
+    {
+        timer_created = true;
+    }
+
+    LIST_HEAD(listhead, list_data_s) head;
+    LIST_INIT(&head);
+
+    timer_spec.it_value.tv_sec = 10;
+    timer_spec.it_value.tv_nsec = 0;
+    timer_spec.it_interval.tv_sec = 10;
+    timer_spec.it_interval.tv_nsec = 0;
+
+    if (timer_settime(timerid, 0, &timer_spec, NULL) == -1) {
+        syslog(LOG_ERR, "Error setting interval timer %d", errno);
+        return failure_return_code; 
     }
 
     file = fopen(file_path, "a+");
@@ -190,9 +323,10 @@ int main(int argc, char *argv[])
         close(server_fd);
     }
 
+
     while(forever)
     {
-        client_fd = accept(server_fd, (struct sockaddr *)&client_address, &address_size);
+        int client_fd = accept(server_fd, (struct sockaddr *)&client_address, &address_size);
         if (client_fd == -1)
         {
             syslog(LOG_ERR, "Accept call failed");
@@ -205,35 +339,42 @@ int main(int argc, char *argv[])
             inet_ntop(AF_INET, &client_address.sin_addr, client_ip, sizeof(client_ip));
             syslog(LOG_INFO, "Accepted connection from %s", client_ip);
 
-            int bytes_received;
-
-            while ((bytes_received = recv(client_fd, buffer, buffer_size - 1, 0)) > 0)
+            list_data_t* thread_data = malloc(sizeof(list_data_t));
+            if(thread_data)
             {
-                buffer[bytes_received] = '\0';
-                fputs(buffer, file);
-                fflush(file);
-                if (strchr(buffer, '\n'))
+                thread_data->client          = client_fd;
+                thread_data->file            = file;
+                thread_data->file_mutex      = &lock;
+                thread_data->done_processing = 0;
+                memcpy(thread_data->client_ip, client_ip, INET_ADDRSTRLEN);
+
+                if ((pthread_create(&thread_data->ptid, NULL, client_thread, thread_data)) != 0)
                 {
-                    break;
-                } 
+                    syslog(LOG_ERR, "Failed to spawn thread");
+                    free(thread_data);
+                    close(client_fd);
+                    continue;
+                }
+                LIST_INSERT_HEAD(&head, thread_data, entries);
             }
-
-            fseek(file, 0, SEEK_SET);
-
-            while (fgets(buffer, buffer_size, file))
+            else
             {
-                send(client_fd, buffer, strlen(buffer), 0);
+                syslog(LOG_ERR, "Failed to allocate thread storage");
+                close(client_fd);
+                continue;
             }
-
-            syslog(LOG_INFO, "Closed connection from %s", client_ip);
-
-            close(client_fd);
         }
+    }
 
-        
+    // join threads
+    list_data_t *datap=NULL;
+    while (!LIST_EMPTY(&head)) {
+        datap = LIST_FIRST(&head);
+        pthread_join(datap->ptid, NULL); 
+        LIST_REMOVE(datap, entries);
+        free(datap);
     }
 
     clean_up_and_exit(success_return_code);
-
     return success_return_code;
 }
