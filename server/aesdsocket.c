@@ -148,32 +148,6 @@ void* client_thread(void* arg)
     char buffer[buffer_size*2];
 
     list_data_t* thread_data = (list_data_t*)arg;
-    // while(!thread_data->done_processing)
-    // {
-    //     int bytes_received;
-    //     pthread_mutex_lock(thread_data->file_mutex);
-    //     while ((bytes_received = recv(thread_data->client, buffer, buffer_size - 1, 0)) > 0)
-    //     {
-    //         buffer[bytes_received] = '\0';
-    //         fputs(buffer, thread_data->file);
-    //         fflush(thread_data->file);
-    //         if (strchr(buffer, '\n'))
-    //         {
-    //             break;
-    //         } 
-    //     }
-
-    //     fseek(thread_data->file, 0, SEEK_SET);
-
-    //     while (fgets(buffer, buffer_size, thread_data->file))
-    //     {
-    //         send(thread_data->client, buffer, strlen(buffer), 0);
-    //     }
-    //     pthread_mutex_unlock(thread_data->file_mutex); 
-
-    //     close(thread_data->client);
-    //     thread_data->done_processing = 1;
-    // }
 
     while(!thread_data->done_processing)
     {
