@@ -232,9 +232,8 @@ void* client_thread(void* arg)
                 pthread_mutex_lock(thread_data->file_mutex);
                 fseek(file, 0, SEEK_SET);
                 ssize_t read_bytes = fread(buffer, 1, buffer_size -1, file);
-                syslog(LOG_ERR, "read_bytes %ld\n", read_bytes);
+                syslog(LOG_INFO, "read_bytes %ld\n", read_bytes);
                 while(read_bytes > 0)
-                // while (fgets(buffer, buffer_size, file))
                 {
                     ssize_t bytes_sent = send(thread_data->client, buffer, strlen(buffer), 0);
                     syslog(LOG_INFO, "bytes_sent %ld\n", bytes_sent);
