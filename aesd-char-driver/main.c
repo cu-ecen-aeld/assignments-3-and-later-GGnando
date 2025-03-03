@@ -150,7 +150,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     // update return values assuming operations below pass
 
     retval = count;
-    *f_pos += count;
+    // *f_pos += count;
 
     // user data is copied to temp entry at this point
     char* string = strchr(dev->temp_circular_buffer_entry.buffptr, '\n');
