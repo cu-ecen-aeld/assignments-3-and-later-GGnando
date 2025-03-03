@@ -211,23 +211,23 @@ void* client_thread(void* arg)
             int bytes_received;
             if ((bytes_received = recv(thread_data->client, buffer, buffer_size - 1, 0)) > 0)
             {
-                syslog(LOG_ERR, "bytes_received: %d\n", bytes_received);
+                syslog(LOG_INFO, "bytes_received: %d\n", bytes_received);
                 buffer[bytes_received] = '\0';
                 pthread_mutex_lock(thread_data->file_mutex);
-                // fputs(buffer, file);
-                fwrite(buffer, 1, bytes_received, file);
-                // fflush(file);
+                fputs(buffer, file);
+                // fwrite(buffer, 1, bytes_received, file);
+                fflush(file);
                 pthread_mutex_unlock(thread_data->file_mutex); 
             }
             else
             {
-                syslog(LOG_ERR, "bytes_received <= 0\n");
+                syslog(LOG_INFO, "bytes_received <= 0\n");
             }
             
 
             if (strchr(buffer, '\n'))
             {
-                syslog(LOG_ERR, "got new line\n");
+                syslog(LOG_INFO, "got new line\n");
 
                 pthread_mutex_lock(thread_data->file_mutex);
                 fseek(file, 0, SEEK_SET);
@@ -237,16 +237,15 @@ void* client_thread(void* arg)
                 // while (fgets(buffer, buffer_size, file))
                 {
                     ssize_t bytes_sent = send(thread_data->client, buffer, strlen(buffer), 0);
-                    syslog(LOG_ERR, "bytes_sent %ld\n", bytes_sent);
+                    syslog(LOG_INFO, "bytes_sent %ld\n", bytes_sent);
                     read_bytes= fread(buffer, 1, buffer_size -1, file);
-                    syslog(LOG_ERR, "read_bytes %ld\n", read_bytes);
+                    syslog(LOG_INFO, "read_bytes %ld\n", read_bytes);
                 }
                 pthread_mutex_unlock(thread_data->file_mutex); 
         
                 close(thread_data->client);
                 thread_data->done_processing = 1;
             } 
-
         }
         fclose(file);
 
