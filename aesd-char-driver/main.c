@@ -61,18 +61,25 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
     struct aesd_buffer_entry*  entry = aesd_circular_buffer_find_entry_offset_for_fpos(&dev->circular_buffer, *f_pos, &entry_offset_byte_rtn);
     if(entry)
     {
+        PDEBUG("read: entry valid\n");
         size_t bytes_to_read = MIN(count, entry->size - entry_offset_byte_rtn);
 
         if (copy_to_user(buf, entry->buffptr + entry_offset_byte_rtn, bytes_to_read))
         {
+            PDEBUG("read: copy_to_user failed\n");
             mutex_unlock(&dev->circular_buffer_lock);
             return -EFAULT;
         }
         else
         {
+            PDEBUG("read: copy_to_user worked\n");
             retval = bytes_to_read;
             *f_pos += bytes_to_read;
         }
+    }
+    else
+    {
+        PDEBUG("read: entry not valid\n");
     }
     mutex_unlock(&dev->circular_buffer_lock);
 
