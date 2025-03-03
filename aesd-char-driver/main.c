@@ -245,36 +245,47 @@ void aesd_cleanup_module(void)
         #endif 
     }
 
-    uint32_t index;
+    // uint32_t index;
 
-    uint32_t total_entries;
+    // uint32_t total_entries;
 
-    if(aesd_device.circular_buffer.full)
-    {
-        total_entries = AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
-    }
-    else if(aesd_device.circular_buffer.in_offs > aesd_device.circular_buffer.out_offs)
-    {
-        total_entries = aesd_device.circular_buffer.in_offs - aesd_device.circular_buffer.out_offs;
-    }
-    else
-    {
-        total_entries = AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED - aesd_device.circular_buffer.out_offs + aesd_device.circular_buffer.in_offs;
-    } 
+    // if(aesd_device.circular_buffer.full)
+    // {
+    //     total_entries = AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
+    // }
+    // else if(aesd_device.circular_buffer.in_offs > aesd_device.circular_buffer.out_offs)
+    // {
+    //     total_entries = aesd_device.circular_buffer.in_offs - aesd_device.circular_buffer.out_offs;
+    // }
+    // else
+    // {
+    //     total_entries = AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED - aesd_device.circular_buffer.out_offs + aesd_device.circular_buffer.in_offs;
+    // } 
     
-    index = aesd_device.circular_buffer.out_offs;
+    // index = aesd_device.circular_buffer.out_offs;
     
-    for (uint32_t i = 0; i < total_entries; ++i) {
-        struct aesd_buffer_entry *entry = &aesd_device.circular_buffer.entry[index];
+    // for (uint32_t i = 0; i < total_entries; ++i) {
+    //     struct aesd_buffer_entry *entry = &aesd_device.circular_buffer.entry[index];
         
-        if (entry->buffptr)
-        {
-            #ifdef __KERNEL__
-                kfree((void*)entry->buffptr);
-            #else
-                free((void*)entry->buffptr);
-            #endif 
-        }
+    //     if (entry->buffptr)
+    //     {
+    //         #ifdef __KERNEL__
+    //             kfree((void*)entry->buffptr);
+    //         #else
+    //             free((void*)entry->buffptr);
+    //         #endif 
+    //     }
+    // }
+    uint8_t index;
+    struct aesd_buffer_entry *entry = NULL;
+
+    AESD_CIRCULAR_BUFFER_FOREACH(entry,&aesd_device.circular_buffer,index) 
+    {
+        #ifdef __KERNEL__
+            kfree((void*)entry->buffptr);
+        #else
+            free((void*)entry->buffptr);
+        #endif 
     }
     unregister_chrdev_region(devno, 1);
 }
