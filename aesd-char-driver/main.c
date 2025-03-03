@@ -94,11 +94,13 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     size_t new_temp_size = count;
     if(dev->temp_circular_buffer_entry.size)
     {
+        PDEBUG("writing into existing buffer\n");
         // data is in temp buffer reallocate
         new_temp_size = dev->temp_circular_buffer_entry.size + count;
         dev->temp_circular_buffer_entry.buffptr = krealloc(dev->temp_circular_buffer_entry.buffptr, new_temp_size, GFP_KERNEL);
         if(dev->temp_circular_buffer_entry.buffptr == NULL)
         {
+            PDEBUG("bad realloc\n");
             dev->temp_circular_buffer_entry.size = 0;
             mutex_unlock(&dev->circular_buffer_lock);
             return -ENOMEM;
@@ -110,6 +112,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     }
     else
     {
+        PDEBUG("new buffer\n");
         dev->temp_circular_buffer_entry.buffptr = kmalloc(count, GFP_KERNEL);
         if(dev->temp_circular_buffer_entry.buffptr == NULL)
         {
@@ -120,6 +123,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 
     if (copy_from_user(&dev->temp_circular_buffer_entry.buffptr[offset], buf, count))
     {
+        PDEBUG("copy_from_user failed\n");
         kfree(dev->temp_circular_buffer_entry.buffptr);
         dev->temp_circular_buffer_entry.size = 0;
         mutex_unlock(&dev->circular_buffer_lock);
@@ -127,6 +131,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     }
     else
     {
+        PDEBUG("copy_from_user worked\n");
         dev->temp_circular_buffer_entry.size = new_temp_size;
     }
     // update return values assuming operations below pass
@@ -138,6 +143,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 
     if(strchr(dev->temp_circular_buffer_entry.buffptr, '\n'))
     {
+        PDEBUG("found new line\n");
         char* old_entry_mem = aesd_circular_buffer_add_entry(&dev->circular_buffer, &dev->temp_circular_buffer_entry);
         if(old_entry_mem)
         {
@@ -145,7 +151,6 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
         }
         dev->temp_circular_buffer_entry.buffptr = NULL;
         dev->temp_circular_buffer_entry.size = 0;
-
     }
 
     mutex_unlock(&dev->circular_buffer_lock);
