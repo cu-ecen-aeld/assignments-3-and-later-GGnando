@@ -143,7 +143,18 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 
     // user data is copied to temp entry at this point
     char* string = strchr(dev->temp_circular_buffer_entry.buffptr, '\n');
-    if(string)
+    size_t newline_offset = 0;
+    bool newline_found = false;
+    for(size_t i = 0; i < dev->temp_circular_buffer_entry.size; ++i)
+    {
+        if(dev->temp_circular_buffer_entry.buffptr[i] == '\n')
+        {
+            newline_offset = i;
+            newline_found = true;
+            break;
+        }
+    }
+    if(newline_found)
     {
         PDEBUG("found new line offset %d\n", string - dev->temp_circular_buffer_entry.buffptr);
         PDEBUG("found new line size %d\n", dev->temp_circular_buffer_entry.size);
