@@ -101,10 +101,16 @@ int aesd_init_module(void)
         return result;
     }
     memset(&aesd_device,0,sizeof(struct aesd_dev));
-
     /**
      * TODO: initialize the AESD specific portion of the device
      */
+
+    mutex_init(&aesd_device.circular_buffer_lock);
+    // init circular buffer
+    aesd_circular_buffer_init(&aesd_device.circular_buffer);
+    // init temp entry for partial writes
+    aesd_device.temp_circular_buffer_entry.buffptr= NULL;
+    aesd_device.temp_circular_buffer_entry.size= NULL;
 
     result = aesd_setup_cdev(&aesd_device);
 
@@ -125,6 +131,46 @@ void aesd_cleanup_module(void)
      * TODO: cleanup AESD specific poritions here as necessary
      */
 
+    if(aesd_device.temp_circular_buffer_entry.buffptr)
+    {
+        #ifdef __KERNEL__
+            kfree((void*)aesd_device.temp_circular_buffer_entry.buffptr);
+        #else
+            free((void*)aesd_device.temp_circular_buffer_entry.buffptr);
+        #endif 
+    }
+
+    uint32_t index;
+
+    uint32_t total_entries;
+
+    if(aesd_device.circular_buffer.full)
+    {
+        total_entries = AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
+    }
+    else if(aesd_device.circular_buffer.in_offs > aesd_device.circular_buffer.out_offs)
+    {
+        total_entries = aesd_device.circular_buffer.in_offs - aesd_device.circular_buffer.out_offs;
+    }
+    else
+    {
+        total_entries = AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED - aesd_device.circular_buffer.out_offs + aesd_device.circular_buffer.in_offs;
+    } 
+    
+    index = aesd_device.circular_buffer.out_offs;
+    
+    for (uint32_t i = 0; i < total_entries; ++i) {
+        struct aesd_buffer_entry *entry = &aesd_device.circular_buffer.entry[index];
+        
+        if (entry->buffptr)
+        {
+            #ifdef __KERNEL__
+                kfree((void*)entry->buffptr);
+            #else
+                free((void*)entry->buffptr);
+            #endif 
+        }
+    }
     unregister_chrdev_region(devno, 1);
 }
 
