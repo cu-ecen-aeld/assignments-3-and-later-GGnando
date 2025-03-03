@@ -36,7 +36,7 @@ void add_timestamp_to_file()
     struct tm *tm_info = localtime(&now);
 
     char time_str[100];
-    strftime(time_str, sizeof(time_str), "%Y %m %d %H %M %S %Z\n", tm_info);
+    strftime(time_str, sizeof(time_str), "%Y %m %d %H %M %S %Z", tm_info);
     pthread_mutex_lock(&lock);
     fprintf(file, "timestamp:%s\n", time_str);
     pthread_mutex_unlock(&lock);
@@ -194,15 +194,6 @@ int main(int argc, char *argv[])
     }
     openlog("aesdsocket", LOG_PID | LOG_CONS, LOG_USER);
 
-    // Set up signal handlers
-    struct sigaction sa;
-    sa.sa_handler = signal_handler;
-    sa.sa_flags = 0;
-    sigemptyset(&sa.sa_mask);
-    sigaction(SIGINT, &sa, NULL);
-    sigaction(SIGTERM, &sa, NULL);
-    sigaction(SIGALRM, &sa, NULL);
-
     // setup socket for server
     struct addrinfo hints, *res;
     struct sockaddr_in client_address;
@@ -243,22 +234,11 @@ int main(int argc, char *argv[])
     }
     
     freeaddrinfo(res);
-    
-    if (listen(server_fd, backlog) == -1) 
-    {
-        syslog(LOG_ERR, "Listen call failed");
-        close(server_fd);
-        return failure_return_code;
-    }
-
-    if (pthread_mutex_init(&lock, NULL) != 0) { 
-        syslog(LOG_ERR, "Mutex Init failed");
-        return failure_return_code; 
-    } 
 
     if (daemon_requested) {
         become_daemon();
     }
+
 
     struct sigevent sev;
     struct itimerspec timer_spec;
@@ -276,6 +256,7 @@ int main(int argc, char *argv[])
     {
         timer_created = true;
     }
+    
 
     LIST_HEAD(listhead, list_data_s) head;
     LIST_INIT(&head);
@@ -290,13 +271,34 @@ int main(int argc, char *argv[])
         return failure_return_code; 
     }
 
+    // Set up signal handlers
+    struct sigaction sa;
+    sa.sa_handler = signal_handler;
+    sa.sa_flags = 0;
+    sigemptyset(&sa.sa_mask);
+    sigaction(SIGINT, &sa, NULL);
+    sigaction(SIGTERM, &sa, NULL);
+    sigaction(SIGALRM, &sa, NULL);
+    
+    if (listen(server_fd, backlog) == -1) 
+    {
+        syslog(LOG_ERR, "Listen call failed");
+        close(server_fd);
+        return failure_return_code;
+    }
+
+    if (pthread_mutex_init(&lock, NULL) != 0) { 
+        syslog(LOG_ERR, "Mutex Init failed");
+        return failure_return_code; 
+    } 
+
+
     file = fopen(file_path, "a+");
     if (!file)
     {
         syslog(LOG_ERR, "Failed to open file");
         close(server_fd);
     }
-
 
     while(forever)
     {
