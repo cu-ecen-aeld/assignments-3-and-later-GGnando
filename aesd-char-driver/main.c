@@ -21,6 +21,8 @@
 int aesd_major =   0; // use dynamic major
 int aesd_minor =   0;
 
+#define MIN(a,b) ((a) < (b) ? (a) : (b))
+
  /** TODO: fill in your name **/
 MODULE_AUTHOR("Fernando Guerra");
 MODULE_LICENSE("Dual BSD/GPL");
@@ -52,6 +54,28 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
     /**
      * TODO: handle read
      */
+    struct aesd_dev *dev = filp->private_data;
+    
+    mutex_lock(&dev->circular_buffer_lock);
+    size_t entry_offset_byte_rtn;
+    struct aesd_buffer_entry*  entry = aesd_circular_buffer_find_entry_offset_for_fpos(&dev->circular_buffer, *f_pos, &entry_offset_byte_rtn);
+    if(entry)
+    {
+        size_t bytes_to_read = MIN(count, entry->size - entry_offset_byte_rtn);
+
+        if (copy_to_user(buf, entry->buffptr + entry_offset_byte_rtn, bytes_to_read))
+        {
+            mutex_unlock(&dev->circular_buffer_lock);
+            return -EFAULT;
+        }
+        else
+        {
+            retval = bytes_to_read;
+            *f_pos += bytes_to_read;
+        }
+    }
+    mutex_unlock(&dev->circular_buffer_lock);
+
     return retval;
 }
 
@@ -77,6 +101,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
         {
             kfree(dev->temp_circular_buffer_entry.buffptr);
             dev->temp_circular_buffer_entry.size = 0;
+            mutex_unlock(&dev->circular_buffer_lock);
             return -ENOMEM;
         }
         else
@@ -89,6 +114,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
         dev->temp_circular_buffer_entry.buffptr = kmalloc(count, GFP_KERNEL);
         if(dev->temp_circular_buffer_entry.buffptr == NULL)
         {
+            mutex_unlock(&dev->circular_buffer_lock);
             return -ENOMEM;
         }
     }
@@ -97,6 +123,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     {
         kfree(dev->temp_circular_buffer_entry.buffptr);
         dev->temp_circular_buffer_entry.size = 0;
+        mutex_unlock(&dev->circular_buffer_lock);
         return -EFAULT;
     }
     else
