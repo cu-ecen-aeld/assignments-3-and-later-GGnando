@@ -29,33 +29,53 @@
 struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct aesd_circular_buffer *buffer,
             size_t char_offset, size_t *entry_offset_byte_rtn )
 {
-    size_t current_offset = 0;
-    uint32_t index;
-    uint32_t total_entries;
-    if(buffer->full)
-    {
-        total_entries = AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
-    }
-    else if(buffer->in_offs > buffer->out_offs)
-    {
-        total_entries = buffer->in_offs - buffer->out_offs;
-    }
-    else
-    {
-        total_entries = AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED - buffer->out_offs + buffer->in_offs;
-    } 
+    // size_t current_offset = 0;
+    // uint32_t index;
+    // uint32_t total_entries;
+    // if(buffer->full)
+    // {
+    //     total_entries = AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
+    // }
+    // else if(buffer->in_offs > buffer->out_offs)
+    // {
+    //     total_entries = buffer->in_offs - buffer->out_offs;
+    // }
+    // else
+    // {
+    //     total_entries = AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED - buffer->out_offs + buffer->in_offs;
+    // } 
     
-    index = buffer->out_offs;
+    // index = buffer->out_offs;
 
-    for (uint32_t i = 0; i < total_entries; ++i) {
-        struct aesd_buffer_entry *entry = &buffer->entry[index];
+    // for (uint32_t i = 0; i < total_entries; ++i) {
+    //     struct aesd_buffer_entry *entry = &buffer->entry[index];
         
-        if (char_offset < (current_offset + entry->size)) {
-            *entry_offset_byte_rtn = char_offset - current_offset;
-            return entry;
+    //     if (char_offset < (current_offset + entry->size)) {
+    //         *entry_offset_byte_rtn = char_offset - current_offset;
+    //         return entry;
+    //     }
+    //     current_offset += entry->size;
+    //     index = (index + 1) % AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
+    // }
+
+    for (int i = 0; i < AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED; i++)
+    {
+        int entry_i = (buffer->out_offs + i) % AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
+
+        if (buffer->entry[entry_i].buffptr == NULL)
+        {
+            return NULL;
         }
-        current_offset += entry->size;
-        index = (index + 1) % AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
+
+        if (buffer->entry[entry_i].size > char_offset)
+        {
+            *entry_offset_byte_rtn = char_offset;
+            return &buffer->entry[entry_i];
+        }
+        else
+        {
+            char_offset -= buffer->entry[entry_i].size;
+        }
     }
     return NULL;
 }
