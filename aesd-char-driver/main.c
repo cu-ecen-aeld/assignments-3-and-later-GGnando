@@ -136,8 +136,8 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     }
     // update return values assuming operations below pass
 
-    retval = new_temp_size;
-    *f_pos += new_temp_size;
+    retval = count;
+    *f_pos += count;
 
     // user data is copied to temp entry at this point
 
