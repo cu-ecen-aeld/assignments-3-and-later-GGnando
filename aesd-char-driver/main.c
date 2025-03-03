@@ -143,7 +143,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 
     if(strchr(dev->temp_circular_buffer_entry.buffptr, '\n'))
     {
-        PDEBUG("found new line\n");
+        PDEBUG("found new line size %d\n", dev->temp_circular_buffer_entry.size);
         char* old_entry_mem = aesd_circular_buffer_add_entry(&dev->circular_buffer, &dev->temp_circular_buffer_entry);
         if(old_entry_mem)
         {
