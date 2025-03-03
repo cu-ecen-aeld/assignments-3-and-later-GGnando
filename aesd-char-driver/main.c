@@ -109,6 +109,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
         {
             offset = dev->temp_circular_buffer_entry.size;
         }
+        memset(&dev->temp_circular_buffer_entry.buffptr[offset], 0, count);
     }
     else
     {
@@ -119,6 +120,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
             mutex_unlock(&dev->circular_buffer_lock);
             return -ENOMEM;
         }
+        memset(dev->temp_circular_buffer_entry.buffptr, 0, count);
     }
 
     if (copy_from_user(&dev->temp_circular_buffer_entry.buffptr[offset], buf, count))
