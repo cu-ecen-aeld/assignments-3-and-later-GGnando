@@ -63,6 +63,63 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     /**
      * TODO: handle write
      */
+    struct aesd_dev *dev = filp->private_data;
+    mutex_lock(&dev->circular_buffer_lock);
+
+    size_t offset = 0;
+    size_t new_temp_size = count;
+    if(dev->temp_circular_buffer_entry.size)
+    {
+        // data is in temp buffer reallocate and concat new data
+        new_temp_size = dev->temp_circular_buffer_entry.size + count;
+        dev->temp_circular_buffer_entry.buffptr = krealloc(dev->temp_circular_buffer_entry.buffptr, new_temp_size, GFP_KERNEL);
+        if(dev->temp_circular_buffer_entry.buffptr == NULL)
+        {
+            kfree(dev->temp_circular_buffer_entry.buffptr);
+            dev->temp_circular_buffer_entry.size = 0;
+            return -ENOMEM;
+        }
+        else
+        {
+            offset = dev->temp_circular_buffer_entry.size;
+        }
+    }
+    else
+    {
+        dev->temp_circular_buffer_entry.buffptr = kmalloc(count, GFP_KERNEL);
+        if(dev->temp_circular_buffer_entry.buffptr == NULL)
+        {
+            return -ENOMEM;
+        }
+    }
+
+    if (copy_from_user(&dev->temp_circular_buffer_entry.buffptr[offset], buf, count))
+    {
+        kfree(dev->temp_circular_buffer_entry.buffptr);
+        dev->temp_circular_buffer_entry.size = 0;
+        return -EFAULT;
+    }
+    else
+    {
+        dev->temp_circular_buffer_entry.size = new_temp_size;
+    }
+    // update return values assuming operations below pass
+
+    retval = new_temp_size;
+    *f_pos += new_temp_size;
+
+    // user data is copied to temp entry at this point
+
+    if(strchr(dev->temp_circular_buffer_entry.buffptr, '\n'))
+    {
+        char* old_entry_mem = aesd_circular_buffer_add_entry(&dev->circular_buffer, &dev->temp_circular_buffer_entry);
+        if(old_entry_mem)
+        {
+            kfree(old_entry_mem);
+        }
+    }
+
+    mutex_unlock(&dev->circular_buffer_lock);
     return retval;
 }
 struct file_operations aesd_fops = {
