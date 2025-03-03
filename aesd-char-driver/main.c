@@ -57,8 +57,8 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
     struct aesd_dev *dev = filp->private_data;
     
     mutex_lock(&dev->circular_buffer_lock);
-    PDEBUG("read: dev->circular_buffer.in_offs",dev->circular_buffer.in_offs);
-    PDEBUG("read: dev->circular_buffer.out_offs",dev->circular_buffer.out_offs);
+    PDEBUG("read: dev->circular_buffer.in_offs %d",dev->circular_buffer.in_offs);
+    PDEBUG("read: dev->circular_buffer.out_offs %d",dev->circular_buffer.out_offs);
 
     size_t entry_offset_byte_rtn;
     struct aesd_buffer_entry*  entry = aesd_circular_buffer_find_entry_offset_for_fpos(&dev->circular_buffer, *f_pos, &entry_offset_byte_rtn);
@@ -99,8 +99,8 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
      */
     struct aesd_dev *dev = filp->private_data;
     mutex_lock(&dev->circular_buffer_lock);
-    PDEBUG("write: dev->circular_buffer.in_offs",dev->circular_buffer.in_offs);
-    PDEBUG("write: dev->circular_buffer.out_offs",dev->circular_buffer.out_offs);
+    PDEBUG("write: dev->circular_buffer.in_offs %d",dev->circular_buffer.in_offs);
+    PDEBUG("write: dev->circular_buffer.out_offs %d",dev->circular_buffer.out_offs);
     size_t offset = 0;
     size_t new_temp_size = count;
     if(dev->temp_circular_buffer_entry.size)
@@ -177,8 +177,8 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
         dev->temp_circular_buffer_entry.buffptr = NULL;
         dev->temp_circular_buffer_entry.size = 0;
     }
-    PDEBUG("write: dev->circular_buffer.in_offs",dev->circular_buffer.in_offs);
-    PDEBUG("write: dev->circular_buffer.out_offs",dev->circular_buffer.out_offs);
+    PDEBUG("write: dev->circular_buffer.in_offs %d",dev->circular_buffer.in_offs);
+    PDEBUG("write: dev->circular_buffer.out_offs %d",dev->circular_buffer.out_offs);
     mutex_unlock(&dev->circular_buffer_lock);
     return retval;
 }
