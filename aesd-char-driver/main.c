@@ -142,7 +142,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     *f_pos += count;
 
     // user data is copied to temp entry at this point
-    char* string = strchr(dev->temp_circular_buffer_entry.buffptr, '\n')
+    char* string = strchr(dev->temp_circular_buffer_entry.buffptr, '\n');
     if(string)
     {
         PDEBUG("found new line offset %d\n", string - dev->temp_circular_buffer_entry.buffptr);
@@ -204,7 +204,7 @@ int aesd_init_module(void)
     aesd_circular_buffer_init(&aesd_device.circular_buffer);
     // init temp entry for partial writes
     aesd_device.temp_circular_buffer_entry.buffptr= NULL;
-    aesd_device.temp_circular_buffer_entry.size= NULL;
+    aesd_device.temp_circular_buffer_entry.size= 0;
 
     result = aesd_setup_cdev(&aesd_device);
 
