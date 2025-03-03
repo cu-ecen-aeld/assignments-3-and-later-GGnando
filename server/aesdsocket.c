@@ -20,7 +20,21 @@ const char* port = "9000";
 // return codes
 const int success_return_code = 0;
 const int failure_return_code = -1;
+
+#define USE_AESD_CHAR_DEVICE 1
+
+#ifdef USE_AESD_CHAR_DEVICE
+const char* file_path = "/dev/aesdchar";
+#else
 const char* file_path = "/var/tmp/aesdsocketdata";
+#endif
+
+// #ifdef USE_AESD_CHAR_DEVICE
+// const char* file_path = "/var/tmp/aesdsocketdata";
+// #else
+// const char* file_path = "/dev/aesdchar";
+// #endif
+
 FILE *file = NULL;
 const int backlog = 100;
 volatile sig_atomic_t forever = 1;
@@ -32,14 +46,17 @@ pthread_mutex_t lock;
 
 void add_timestamp_to_file()
 {
-    time_t now = time(NULL);
-    struct tm *tm_info = localtime(&now);
+    #ifndef USE_AESD_CHAR_DEVICE
 
-    char time_str[100];
-    strftime(time_str, sizeof(time_str), "%Y %m %d %H %M %S %Z", tm_info);
-    pthread_mutex_lock(&lock);
-    fprintf(file, "timestamp:%s\n", time_str);
-    pthread_mutex_unlock(&lock);
+        time_t now = time(NULL);
+        struct tm *tm_info = localtime(&now);
+
+        char time_str[100];
+        strftime(time_str, sizeof(time_str), "%Y %m %d %H %M %S %Z", tm_info);
+        pthread_mutex_lock(&lock);
+        fprintf(file, "timestamp:%s\n", time_str);
+        pthread_mutex_unlock(&lock);
+    #endif
 }
 
 typedef struct list_data_s list_data_t;
@@ -73,17 +90,18 @@ void clean_up_and_exit(int exit_flag)
 {
     if(server_fd != -1)
     {
-        if (file != NULL)
-        {
-            fclose(file);
-            file = NULL;
-            int ret_remove = remove(file_path);
-            if(ret_remove != 0)
+        #ifndef USE_AESD_CHAR_DEVICE
+            if (file != NULL)
             {
-                syslog(LOG_ERR, "error removing file %s", file_path);
+                fclose(file);
+                file = NULL;
+                    int ret_remove = remove(file_path);
+                    if(ret_remove != 0)
+                    {
+                        syslog(LOG_ERR, "error removing file %s", file_path);
+                    }
             }
-        }
-
+        #endif
         closelog();
         close(server_fd);
     }
@@ -143,41 +161,83 @@ int become_daemon()
 }
 
 void* client_thread(void* arg) 
-{ 
+{         
     // allocate buffer on stack
     char buffer[buffer_size*2];
 
     list_data_t* thread_data = (list_data_t*)arg;
-
-    while(!thread_data->done_processing)
-    {
-        int bytes_received;
-        if ((bytes_received = recv(thread_data->client, buffer, buffer_size - 1, 0)) > 0)
-        {
-            buffer[bytes_received] = '\0';
-            pthread_mutex_lock(thread_data->file_mutex);
-            fputs(buffer, thread_data->file);
-            fflush(thread_data->file);
-            pthread_mutex_unlock(thread_data->file_mutex); 
-        }
-        
-
-        if (strchr(buffer, '\n'))
-        {
-            pthread_mutex_lock(thread_data->file_mutex);
-            fseek(thread_data->file, 0, SEEK_SET);
-
-            while (fgets(buffer, buffer_size, thread_data->file))
-            {
-                send(thread_data->client, buffer, strlen(buffer), 0);
-            }
-            pthread_mutex_unlock(thread_data->file_mutex); 
     
-            close(thread_data->client);
-            thread_data->done_processing = 1;
-        } 
+    #if (!USE_AESD_CHAR_DEVICE)
 
-    }
+        while(!thread_data->done_processing)
+        {
+            int bytes_received;
+            if ((bytes_received = recv(thread_data->client, buffer, buffer_size - 1, 0)) > 0)
+            {
+                buffer[bytes_received] = '\0';
+                pthread_mutex_lock(thread_data->file_mutex);
+                fputs(buffer, thread_data->file);
+                fflush(thread_data->file);
+                pthread_mutex_unlock(thread_data->file_mutex); 
+            }
+            
+            if (strchr(buffer, '\n'))
+            {
+                pthread_mutex_lock(thread_data->file_mutex);
+                fseek(thread_data->file, 0, SEEK_SET);
+
+                while (fgets(buffer, buffer_size, thread_data->file))
+                {
+                    send(thread_data->client, buffer, strlen(buffer), 0);
+                }
+                pthread_mutex_unlock(thread_data->file_mutex); 
+        
+                close(thread_data->client);
+                thread_data->done_processing = 1;
+            }
+        }
+
+    #else
+
+        file = fopen(file_path, "a+");
+        if (!file)
+        {
+            syslog(LOG_ERR, "Failed to open file");
+            return NULL;
+        }
+
+        while(!thread_data->done_processing)
+        {
+            int bytes_received;
+            if ((bytes_received = recv(thread_data->client, buffer, buffer_size - 1, 0)) > 0)
+            {
+                buffer[bytes_received] = '\0';
+                pthread_mutex_lock(thread_data->file_mutex);
+                fputs(buffer, file);
+                fflush(file);
+                pthread_mutex_unlock(thread_data->file_mutex); 
+            }
+            
+
+            if (strchr(buffer, '\n'))
+            {
+                pthread_mutex_lock(thread_data->file_mutex);
+                fseek(file, 0, SEEK_SET);
+
+                while (fgets(buffer, buffer_size, file))
+                {
+                    send(thread_data->client, buffer, strlen(buffer), 0);
+                }
+                pthread_mutex_unlock(thread_data->file_mutex); 
+        
+                close(thread_data->client);
+                thread_data->done_processing = 1;
+            } 
+
+        }
+        fclose(file);
+
+    #endif
 
     syslog(LOG_INFO, "Closed connection from %s", thread_data->client_ip);
 
@@ -292,13 +352,15 @@ int main(int argc, char *argv[])
         return failure_return_code; 
     } 
 
+    #if (!USE_AESD_CHAR_DEVICE)
 
-    file = fopen(file_path, "a+");
-    if (!file)
-    {
-        syslog(LOG_ERR, "Failed to open file");
-        close(server_fd);
-    }
+        file = fopen(file_path, "a+");
+        if (!file)
+        {
+            syslog(LOG_ERR, "Failed to open file");
+            close(server_fd);
+        }
+    #endif
 
     while(forever)
     {
