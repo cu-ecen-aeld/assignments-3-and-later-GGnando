@@ -211,16 +211,23 @@ void* client_thread(void* arg)
             int bytes_received;
             if ((bytes_received = recv(thread_data->client, buffer, buffer_size - 1, 0)) > 0)
             {
+                syslog(LOG_ERR, "bytes_received > 0\n");
                 buffer[bytes_received] = '\0';
                 pthread_mutex_lock(thread_data->file_mutex);
                 fputs(buffer, file);
                 fflush(file);
                 pthread_mutex_unlock(thread_data->file_mutex); 
             }
+            else
+            {
+                syslog(LOG_ERR, "bytes_received <= 0\n");
+            }
             
 
             if (strchr(buffer, '\n'))
             {
+                syslog(LOG_ERR, "got new line\n");
+
                 pthread_mutex_lock(thread_data->file_mutex);
                 fseek(file, 0, SEEK_SET);
 
