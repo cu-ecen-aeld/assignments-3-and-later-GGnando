@@ -144,6 +144,9 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
         {
             kfree(old_entry_mem);
         }
+        dev->temp_circular_buffer_entry.buffptr = NULL;
+        dev->temp_circular_buffer_entry.size = 0;
+
     }
 
     mutex_unlock(&dev->circular_buffer_lock);
