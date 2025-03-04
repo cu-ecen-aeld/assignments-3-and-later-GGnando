@@ -367,11 +367,15 @@ void aesd_cleanup_module(void)
 
     AESD_CIRCULAR_BUFFER_FOREACH(entry,&aesd_device.circular_buffer,index) 
     {
-        #ifdef __KERNEL__
-            kfree((void*)entry->buffptr);
-        #else
-            free((void*)entry->buffptr);
-        #endif 
+        if(entry)
+        {
+            #ifdef __KERNEL__
+                kfree((void*)entry->buffptr);
+            #else
+                free((void*)entry->buffptr);
+            #endif 
+        }
+
     }
     unregister_chrdev_region(devno, 1);
 }
