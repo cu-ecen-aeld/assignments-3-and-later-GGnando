@@ -14,6 +14,7 @@
 #include <netdb.h>
 #include <pthread.h> 
 #include "queue.h"
+#include "../aesd-char-driver/aesd_ioctl.h"
 
 const char* port = "9000";
 
@@ -213,11 +214,6 @@ void* client_thread(void* arg)
             {
                 syslog(LOG_INFO, "bytes_received: %d\n", bytes_received);
                 buffer[bytes_received] = '\0';
-                pthread_mutex_lock(thread_data->file_mutex);
-                fputs(buffer, file);
-                // fwrite(buffer, 1, bytes_received, file);
-                fflush(file);
-                pthread_mutex_unlock(thread_data->file_mutex); 
             }
             else
             {
@@ -228,9 +224,39 @@ void* client_thread(void* arg)
             if (strchr(buffer, '\n'))
             {
                 syslog(LOG_INFO, "got new line\n");
+                if(strstr(buffer, "AESDCHAR_IOCSEEKTO"))
+                {
+                    syslog(LOG_INFO, "got seek command %d\n", bytes_received);
+                    unsigned int write_cmd;
+                    unsigned int write_cmd_offset;
+                    // got command
+                    if (sscanf(buffer, "AESDCHAR_IOCSEEKTO:%u,%u", &write_cmd, &write_cmd_offset) == 2)
+                    {
+                        struct aesd_seekto seekto;
+                        seekto.write_cmd = write_cmd;
+                        seekto.write_cmd_offset = write_cmd_offset;
+                        syslog(LOG_INFO, "parsed seek command write_cmd: %d write_cmd_offset: %d\n", write_cmd, write_cmd_offset);
+                        pthread_mutex_lock(thread_data->file_mutex);
+                        if (ioctl(fileno(file), AESDCHAR_IOCSEEKTO, &seekto) == -1)
+                        {
+                            syslog(LOG_PERROR, "ioctl failed");
+                        }
+                        pthread_mutex_unlock(thread_data->file_mutex); 
+                    }
+                }
+                else
+                {
+                    syslog(LOG_INFO, "bytes_received: %d and wrote to file\n", bytes_received);
 
+                    pthread_mutex_lock(thread_data->file_mutex);
+                    fputs(buffer, file);
+                    // fwrite(buffer, 1, bytes_received, file);
+                    fflush(file);
+                    pthread_mutex_unlock(thread_data->file_mutex); 
+                }
+                
                 pthread_mutex_lock(thread_data->file_mutex);
-                fseek(file, 0, SEEK_SET);
+                // fseek(file, 0, SEEK_SET);
                 ssize_t read_bytes = fread(buffer, 1, buffer_size -1, file);
                 syslog(LOG_INFO, "read_bytes %ld\n", read_bytes);
                 while(read_bytes > 0)
