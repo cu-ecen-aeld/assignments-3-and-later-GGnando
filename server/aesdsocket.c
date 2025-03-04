@@ -257,6 +257,7 @@ void* client_thread(void* arg)
                 
                 pthread_mutex_lock(thread_data->file_mutex);
                 // fseek(file, 0, SEEK_SET);
+                memset(buffer, 0, buffer_size);
                 ssize_t read_bytes = fread(buffer, 1, buffer_size -1, file);
                 syslog(LOG_INFO, "read_bytes %ld\n", read_bytes);
                 while(read_bytes > 0)
