@@ -18,6 +18,7 @@
 #include <linux/cdev.h>
 #include <linux/fs.h> // file_operations
 #include "aesdchar.h"
+#include "aesd_ioctl.h"
 int aesd_major =   0; // use dynamic major
 int aesd_minor =   0;
 
@@ -182,12 +183,116 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     mutex_unlock(&dev->circular_buffer_lock);
     return retval;
 }
+
+loff_t aesd_llseek(struct file *filp, loff_t off, int whence) 
+{
+    PDEBUG("llseek filp->f_pos: %d off: %d whence:%d\n", filp->f_pos, off, whence);
+    loff_t new_pos;
+
+    struct aesd_dev *dev = filp->private_data;
+    mutex_lock(&dev->circular_buffer_lock);
+
+    // get size of data currently stored.
+    size_t size = 0;
+    uint8_t index;
+    struct aesd_buffer_entry *entry = NULL;
+    AESD_CIRCULAR_BUFFER_FOREACH(entry,&aesd_device.circular_buffer,index) 
+    {
+        if(entry)
+        {
+            size += entry->size;
+        }
+    }
+
+    switch (whence) {
+        case SEEK_SET:
+            new_pos = off;
+            break;
+        case SEEK_CUR:
+            new_pos = filp->f_pos + off;
+            break;
+        case SEEK_END:
+            new_pos = size + off;
+            break;
+        default:
+            mutex_unlock(&dev->circular_buffer_lock);
+            return -EINVAL;
+    }
+
+    if(new_pos > size || new_pos < 0 )
+    {
+        mutex_unlock(&dev->circular_buffer_lock);
+        return -EINVAL;
+    }
+
+    filp->f_pos = new_pos;
+    mutex_unlock(&dev->circular_buffer_lock);
+    return filp->f_pos;
+}
+
+long int aesd_unlocked_ioctl(struct file *filp, unsigned int cmd, unsigned long passed_seek)
+{
+    PDEBUG("aesd_unlocked_ioctl filp->f_pos: %d cmd: %d passed_seek:%d\n", filp->f_pos, cmd, passed_seek);
+    struct aesd_dev *dev = filp->private_data;
+
+    struct aesd_seekto seekto;
+    int retval = 0;
+
+    switch (cmd)
+    {
+        case AESDCHAR_IOCSEEKTO:
+            if (copy_from_user(&seekto, (struct aesd_seekto *)passed_seek, sizeof(seekto)))
+            {
+                PDEBUG("aesd_unlocked_ioctl copy_from_user failed\n");
+                retval = -EFAULT;
+            }
+            else
+            {
+                PDEBUG("aesd_unlocked_ioctl copy_from_user worked\n");
+
+                if (mutex_lock_interruptible(&dev->circular_buffer_lock)) {
+                    return -ERESTARTSYS;
+                }
+
+                size_t index_into_buffer = (dev->circular_buffer.out_offs + seekto.write_cmd) % AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
+                PDEBUG("aesd_unlocked_ioctl index_into_buffer %d\n", index_into_buffer);
+
+                //validate parms into buffer
+                if((seekto.write_cmd >= AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED) || (seekto.write_cmd_offset >= dev->circular_buffer.entry[index_into_buffer].size))
+                {
+                    PDEBUG("aesd_unlocked_ioctl invalid parms into buffer\n");
+                    mutex_unlock(&dev->circular_buffer_lock);
+                    return -EINVAL;
+                }
+
+                size_t new_pos = 0;
+                size_t index = 0;
+                for (int i = 0; i < seekto.write_cmd; i++) {
+                    index = (dev->circular_buffer.out_offs + i) % AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
+                    new_pos += dev->circular_buffer.entry[index].size;
+                }
+                new_pos += seekto.write_cmd_offset;
+                filp->f_pos = new_pos;
+                retval = filp->f_pos;
+                mutex_unlock(&dev->circular_buffer_lock);
+            }
+            break;
+        default:
+            retval = -EFAULT;
+            break;
+    }
+
+    return retval;
+}
+
 struct file_operations aesd_fops = {
     .owner =    THIS_MODULE,
     .read =     aesd_read,
     .write =    aesd_write,
     .open =     aesd_open,
     .release =  aesd_release,
+    .llseek         =    aesd_llseek,
+    .unlocked_ioctl =    aesd_unlocked_ioctl,
 };
 
 static int aesd_setup_cdev(struct aesd_dev *dev)
